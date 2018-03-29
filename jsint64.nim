@@ -4,31 +4,28 @@ import strutils
 from algorithm import reverse
 
 type jsInt64 = object
-  low_v: int32
-  high_v: int32
-
-## A cache of the Long representations of small integer values.
-var intCache = initTable[int32, jsInt64](256)
+  low: int32
+  high: int32
 
 const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 proc parseInt(b: string, radix: int = 10): int =
   var sign = 1
-  var stop_idx = 0
+  var stopIdx = 0
   if b[0] in {'-', '+'}:
-    stop_idx += 1
+    stopIdx += 1
     if b[0] == '-':
       sign = -1
 
   var i = 1
   result = 0
 
-  for j in countdown(len(b)-1, stop_idx):
+  for j in countdown(len(b)-1, stopIdx):
     let idx = find(digits, b[j])
     if idx < 0 or idx > (radix - 1):
       quit("invalid number " & $b & " for radix " & $radix, 1)
     result += idx * i
-    if j > stop_idx:
+    if j > stopIdx:
       i *= radix
   return result * sign
 
@@ -43,7 +40,7 @@ proc toString*(n: int, base: int): string =
     if n == 0:
       break
 
-proc initJsInt64*(low_v, high_v: int32): jsInt64 =
+proc initJsInt64*(low, high: int32): jsInt64 =
   ## Constructs a 64-bit two's-complement integer, given its low and high 32-bit
   ## values as *signed* integers.  See the from* functions below for more
   ## convenient ways of constructing Longs.
@@ -62,15 +59,15 @@ proc initJsInt64*(low_v, high_v: int32): jsInt64 =
   ## a positive number, it overflows back into a negative).  Not handling this
   ## case would often result in infinite recursion.
   ##
-  result.low_v = low_v
-  result.high_v  = high_v
+  result.low = low
+  result.high = high
 
-const ZERO = jsInt64(low_v: 0, high_v: 0)
-const ONE  = jsInt64(low_v: 1, high_v: 0)
-const NEG_ONE = jsInt64(low_v: -1, high_v: -1)
-const MAX_VALUE = jsInt64(low_v: 0xFFFFFFFF'i32, high_v: 0x7FFFFFFF'i32)
-const MIN_VALUE = jsInt64(low_v: 0, high_v: 0x80000000'i32)
-const TWO_PWR_24 = jsInt64(low_v: 1 shl 24, high_v: 0)
+const ZERO = jsInt64(low: 0, high: 0)
+const ONE  = jsInt64(low: 1, high: 0)
+const NEG_ONE = jsInt64(low: -1, high: -1)
+const MAX_VALUE = jsInt64(low: 0xFFFFFFFF'i32, high: 0x7FFFFFFF'i32)
+const MIN_VALUE = jsInt64(low: 0, high: 0x80000000'i32)
+const TWO_PWR_24 = jsInt64(low: 1 shl 24, high: 0)
 
 const TWO_PWR_16_DBL = float(1 shl 16)
 #const TWO_PWR_24_DBL = float(1 shl 24)
@@ -90,35 +87,35 @@ proc isFinite*(x: SomeReal): bool =
     return true
 
 proc `==`*(x, y: jsInt64): bool =
-  result = x.high_v == y.high_v and x.low_v == y.low_v
+  result = x.high == y.high and x.low == y.low
 
 proc `!=`*(x, y: jsInt64): bool =
-  result = x.high_v != y.high_v or x.low_v != y.low_v
+  result = x.high != y.high or x.low != y.low
 
 proc isZero*(x: jsInt64): bool =
-  result = x.high_v == 0 and x.low_v == 0
+  result = x.high == 0 and x.low == 0
 
-proc isNegative*(x: jsInt64): bool = x.high_v < 0
+proc isNegative*(x: jsInt64): bool = x.high < 0
 
-proc isOdd*(x: jsInt64): bool = (x.low_v and 1) == 1
+proc isOdd*(x: jsInt64): bool = (x.low and 1) == 1
 
 proc `not`*(x: jsInt64): jsInt64 =
-  result.low_v = (not x.low_v)
-  result.high_v = (not x.high_v)
+  result.low = (not x.low)
+  result.high = (not x.high)
 
 template `inv`*(x: jsInt64): jsInt64 = `not`(x)
 
 proc `and`*(x, y: jsInt64): jsInt64 =
-  result.low_v = x.low_v and y.low_v
-  result.high_v = x.high_v and y.high_v
+  result.low = x.low and y.low
+  result.high = x.high and y.high
 
 proc `or`*(x, y: jsInt64): jsInt64 =
-  result.low_v = x.low_v or y.low_v
-  result.high_v = x.high_v or y.high_v
+  result.low = x.low or y.low
+  result.high = x.high or y.high
 
 proc `xor`*(x, y: jsInt64): jsInt64 =
-  result.low_v = x.low_v xor y.low_v
-  result.high_v = x.high_v xor y.high_v
+  result.low = x.low xor y.low
+  result.high = x.high xor y.high
 
 proc `ashr`*(x: int32, y: int32): int32 =
   let size = sizeof(int32) * 8
@@ -130,21 +127,21 @@ proc `ashr`*(x: int32, y: int32): int32 =
 proc fromBits*(lowbits, highbits: int32): jsInt64 =
   ## Returns a Long representing the 64-bit integer that comes by concatenating
   ## the given high and low bits.  Each is assumed to use 32 bits.
-  result.low_v = lowbits
-  result.high_v = highbits
+  result.low = lowbits
+  result.high = highbits
 
 proc shiftLeft*(x: jsInt64, n: int): jsInt64 =
   var n = n and 63
   if n == 0:
     return x
   else:
-    let low_v = x.low_v
+    let low = x.low
     if n < 32:
-      let high_v = x.high_v
-      return fromBits(low_v shl n,
-                      (high_v shl n) or (low_v shr (32 - n)))
+      let high = x.high
+      return fromBits(low shl n,
+                      (high shl n) or (low shr (32 - n)))
     else:
-      return fromBits(0, low_v shl (n - 32))
+      return fromBits(0, low shl (n - 32))
 template `shl`*(x: jsInt64, n: int): jsInt64 =
   shiftLeft(x, n)
 
@@ -153,42 +150,42 @@ proc shiftRight*(x: jsInt64, n: int): jsInt64 =
   if n == 0:
     return x
   else:
-    let high_v = x.high_v
+    let high = x.high
     if n < 32:
-      let low_v = x.low_v
-      return fromBits((low_v shr n) or (high_v shl (32 - n)),
-                      ashr(high_v, n.int32))
+      let low = x.low
+      return fromBits((low shr n) or (high shl (32 - n)),
+                      ashr(high, n.int32))
     else:
-      return fromBits(ashr(high_v, (n - 32).int32),
-                      if high_v >= 0: 0 else: -1)
+      return fromBits(ashr(high, (n - 32).int32),
+                      if high >= 0: 0 else: -1)
 
 proc shiftRightUnsigned*(x: jsInt64, n: int): jsInt64 =
   var n = n and 63
   if n == 0:
     return x
   else:
-    let high_v = x.high_v
+    let high = x.high
     if n < 32:
-      let low_v = x.low_v
-      return fromBits((low_v shr n) or (high_v shl (32  - n)),
-                      high_v shr n)
+      let low = x.low
+      return fromBits((low shr n) or (high shl (32  - n)),
+                      high shr n)
     elif n == 32:
-      return fromBits(high_v, 0)
+      return fromBits(high, 0)
     else:
-      return fromBits(high_v shr (n - 32), 0)
+      return fromBits(high shr (n - 32), 0)
 
 
 proc add*(x, y: jsInt64): jsInt64 =
   # Divide each number into 4 chunks of 16 bits, and then sum the chunks.
-  var a48 = x.high_v shr 16
-  var a32 = x.high_v and 0xFFFF
-  var a16 = (x.low_v shr 16)
-  var a00 = (x.low_v and 0xFFFF)
+  var a48 = x.high shr 16
+  var a32 = x.high and 0xFFFF
+  var a16 = (x.low shr 16)
+  var a00 = (x.low and 0xFFFF)
 
-  var b48 = y.high_v shr 16
-  var b32 = y.high_v and 0xFFFF
-  var b16 = y.low_v shr 16
-  var b00 = y.low_v and 0xFFFF
+  var b48 = y.high shr 16
+  var b32 = y.high and 0xFFFF
+  var b16 = y.low shr 16
+  var b00 = y.low and 0xFFFF
 
   var
     c48 = 0'i32
@@ -232,11 +229,11 @@ proc `dec`*(x: jsInt64): jsInt64 = subtract(x, ONE)
 proc `cmp`*(x, y: jsInt64): int =
   if x == y:
     return 0
-  let x_neg = isNegative(x)
-  let y_neg = isNegative(y)
-  if x_neg and (not y_neg):
+  let xNeg = isNegative(x)
+  let yNeg = isNegative(y)
+  if xNeg and (not yNeg):
     return -1
-  if (not x_neg) and y_neg:
+  if (not xNeg) and yNeg:
     return 1
 
   # at this point the signs are the same, so subtraction will not overflow
@@ -250,13 +247,13 @@ proc `<=`*(x, y: jsInt64): bool = `cmp`(x, y) <= 0
 proc `>`*(x, y: jsInt64): bool = `cmp`(x, y) > 0
 proc `>=`*(x, y: jsInt64): bool = `cmp`(x, y) >= 0
 
-proc getLowBits*(x: jsInt64): int32 = x.low_v
+proc getLowBits*(x: jsInt64): int32 = x.low
 
 proc getLowBitsUnsigned*(x: jsInt64): uint32 =
-  if x.low_v >= 0:
-    result = uint32(x.low_v)
+  if x.low >= 0:
+    result = uint32(x.low)
   else:
-    result = uint32(TWO_PWR_32_DBL + x.low_v.float)
+    result = uint32(TWO_PWR_32_DBL + x.low.float)
 
 proc getNumBitsAbs*(x: jsInt64): int =
   ## Returns the number of bits needed to represent the absolute
@@ -266,16 +263,16 @@ proc getNumBitsAbs*(x: jsInt64): int =
     else:
       return getNumBitsAbs(negate(x))
   else:
-    let val = if x.high_v != 0: x.high_v else: x.low_v
+    let val = if x.high != 0: x.high else: x.low
     var bit: int
     for bit in countDown(31, 1):
       if (val and (1 shl bit)) != 0:
         break
-    return if x.high_v != 0: bit + 33 else: bit + 1
+    return if x.high != 0: bit + 33 else: bit + 1
 
 proc toNumber*(x: jsInt64): float64 =
   ## The closest floating-point representation to this value.
-  result = x.high_v.float * TWO_PWR_32_DBL + getLowBitsUnsigned(x).float
+  result = x.high.float * TWO_PWR_32_DBL + getLowBitsUnsigned(x).float
 
 proc fromNumber*(x: float64): jsInt64 =
   ## Returns a `jsInt64` representing the given value,
@@ -291,17 +288,17 @@ proc fromNumber*(x: float64): jsInt64 =
   elif x < 0:
     return negate(fromNumber(-x))
   else:
-    var low_v: float64 = x mod TWO_PWR_32_DBL
-    var low_v1: int32
-    var high_v: float64 = x / TWO_PWR_32_DBL
-    var high_v1: int32
+    var low: float64 = x mod TWO_PWR_32_DBL
+    var low1: int32
+    var high: float64 = x / TWO_PWR_32_DBL
+    var high1: int32
     when defined(js):
-      {.emit: "`low_v1` = `low_v` | 0".}
-      {.emit: "`high_v1` = `high_v` | 0".}
+      {.emit: "`low1` = `low` | 0".}
+      {.emit: "`high1` = `high` | 0".}
     else:
-      low_v1 = cast[int32](int64(low_v))
-      high_v1 = cast[int32](int64(high_v))
-    return initJsInt64(low_v1, high_v1)
+      low1 = cast[int32](int64(low))
+      high1 = cast[int32](int64(high))
+    return initJsInt64(low1, high1)
 
 when defined(js):
   {.push overflowChecks: off.}
@@ -344,15 +341,15 @@ proc `*`*(x, y: jsInt64): jsInt64 =
 
   # Divide each long into 4 chunks of 16 bits, and then add up 4x4 products.
   # We can skip products that would overflow.
-  var a48 = x.high_v shr 16
-  var a32 = x.high_v and 0xFFFF
-  var a16 = x.low_v shr 16
-  var a00 = x.low_v and 0xFFFF
+  var a48 = x.high shr 16
+  var a32 = x.high and 0xFFFF
+  var a16 = x.low shr 16
+  var a00 = x.low and 0xFFFF
 
-  var b48 = y.high_v shr 16
-  var b32 = y.high_v and 0xFFFF
-  var b16 = y.low_v shr 16
-  var b00 = y.low_v and 0xFFFF
+  var b48 = y.high shr 16
+  var b32 = y.high and 0xFFFF
+  var b16 = y.low shr 16
+  var b00 = y.low and 0xFFFF
 
   var
     c48: int32 = 0
@@ -484,15 +481,9 @@ proc `-`*(x: SomeNumber, y: jsInt64): jsInt64 =
 
 proc fromInt*(value: int32): jsInt64 =
   ## returns a `jsInt64` representing the given (32-bit) integer value.
-  ##
-  if -128 <= value and value < 128:
-    if intCache.hasKey(value):
-      return intCache[value]
   result = initJsInt64(value, if value < 0: -1 else: 0)
-  if - 128 <= value and value < 128:
-    intCache[value] = result
 
-proc toInt*(x: jsInt64): int32 = x.low_v
+proc toInt*(x: jsInt64): int32 = x.low
 
 proc fromNumber*(value: SomeReal): jsInt64 =
   ## Returns a `jsInt64` representing the given value, provided that it
@@ -572,11 +563,11 @@ proc `$`*(x: jsInt64, radix = 10): string =
         digits = "0" & digits
       result = "" & digits & result
 
-proc high*[T: jsInt64](x: typedesc[T]): T =  MAX_VALUE
+proc high*[T: jsInt64](x: typedesc[T]): T = MAX_VALUE
 proc low*[T: jsInt64](x: typedesc[T]): T = MIN_VALUE
 
 converter toInt64*(x: jsInt64): int64 =
-  result = (x.high_v.int64 shl 32) or x.low_v
+  result = (x.high.int64 shl 32) or x.low
 converter toJsInt64(x: float64): jsInt64 =
   result = fromNumber(x)
 converter toJsInt64(x: int64): jsInt64 =
@@ -589,10 +580,12 @@ when isMainModule:
   var x = 62.0
   var y = fromNumber(pow(-2.0,x)+1)
   when not defined(js):
+    echo "not using js"
     var yn = parseInt($y, 10)
     echo yn
   else:
-    echo "y: ", $y
+    echo "using js"
+    echo $y
     var yn = fromString($y, 10)
     echo yn
   echo y
